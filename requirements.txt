@@ -1,0 +1,24 @@
+# AURA — requirements.txt
+# All stages (1-9). See README.md "Implementation Status" for what's
+# actually verified vs. what needs Windows/hardware confirmation.
+
+python-dotenv==1.0.1     # loads .env for configuration (AI_PROVIDER, keys, etc.)
+psutil==6.0.0             # CPU / RAM / battery info
+mss==9.0.1                 # screenshot capture
+requests==2.32.3          # HTTP client for Gemini + Ollama REST calls
+
+# --- voice (Stage 5 + wake-word upgrade) ---
+# Not required to run AURA at all — every voice import is lazy (see
+# app/voice/*.py), so the app works fine without these installed; the
+# GUI falls back to typed-only interaction with a friendly message.
+faster-whisper==1.0.3      # local speech-to-text (CPU, int8 'small' model)
+sounddevice==0.4.7          # microphone capture + playback (used by both STT and Piper)
+numpy==1.26.4                # audio array handling
+pyttsx3==2.90                 # offline text-to-speech via Windows SAPI5 (default/fallback engine)
+piper-tts==1.8.0               # optional higher-quality neural TTS — see AURA_TTS_ENGINE in
+                                # .env.example. Loads a separately-downloaded .onnx voice model
+                                # once at startup and synthesizes in-process (no subprocess per
+                                # utterance). Not required if you're happy with pyttsx3.
+
+# --- testing ---
+pytest==8.3.3

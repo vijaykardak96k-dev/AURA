@@ -1,0 +1,28 @@
+# Secrets — never commit
+.env
+node_modules
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# AURA generated/local data — never commit (but keep the folders themselves)
+logs/*
+!logs/.gitkeep
+data/*
+!data/.gitkeep
+screenshots/*
+!screenshots/.gitkeep
+*.db
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/

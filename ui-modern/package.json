@@ -1,0 +1,12 @@
+{
+  "name": "aura-ui",
+  "version": "1.0.0",
+  "description": "AURA Modern Desktop Interface",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^44.3.0"
+  }
+}
