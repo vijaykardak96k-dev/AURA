@@ -29,6 +29,8 @@ KNOWN_FOLDERS = {
     "pictures": HOME / "Pictures",
     "videos": HOME / "Videos",
     "music": HOME / "Music",
+    # AURA-owned folder inside the project.
+    "screenshots": DEFAULT_SCREENSHOT_DIR,
 }
 
 

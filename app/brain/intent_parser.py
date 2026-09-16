@@ -12,7 +12,9 @@ from app.utils.logger import get_logger
 
 logger = get_logger()
 
-_REFERENCE_WORDS = {"it", "that", "this", "there"}
+_REFERENCE_WORDS = {"it", "that", "this", "there", "that screenshot",
+                    "this screenshot", "that folder", "this folder",
+                    "that file", "this file"}
 
 
 def _resolve_references(action: ActionItem, last_target: dict | None) -> ActionItem:
@@ -28,6 +30,53 @@ def _resolve_references(action: ActionItem, last_target: dict | None) -> ActionI
                 action.parameters[key] = last_target["path"]
 
     return action
+
+
+def _local_context_action(user_text: str) -> ActionItem | None:
+    """
+    Deterministic handling for AURA's most useful conversational references.
+    These commands bypass the LLM so "that screenshot" always means the
+    screenshot AURA most recently created.
+    """
+    import re
+
+    text = (user_text or "").strip().lower()
+    if not text:
+        return None
+
+    if re.search(r"\b(open|show|launch)\b.*\b(that|this)\b.*\bscreenshot\b", text):
+        return ActionItem(
+            action=ActionName.OPEN_FILE,
+            parameters={"path": "", "context": "last_screenshot"},
+            response="",
+        )
+
+    if re.search(r"\b(open|show|launch)\b.*\b(that|this)\b.*\bfolder\b", text):
+        return ActionItem(
+            action=ActionName.OPEN_FOLDER,
+            parameters={"path": "", "context": "last_folder"},
+            response="",
+        )
+
+    if re.search(r"\b(open|show|launch)\b.*\b(that|this)\b.*\b(file|document)\b", text):
+        return ActionItem(
+            action=ActionName.OPEN_FILE,
+            parameters={"path": "", "context": "last_file"},
+            response="",
+        )
+
+    if text in {
+        "open screenshots",
+        "open screenshot folder",
+        "open the screenshot folder",
+        "show screenshots",
+    }:
+        return ActionItem(
+            action=ActionName.OPEN_SCREENSHOTS,
+            parameters={},
+        )
+
+    return None
 
 
 def parse_intent(
@@ -65,6 +114,11 @@ def parse_intent(
                 response=local_identity,
             )
         ]
+
+    local_context = _local_context_action(user_text)
+    if local_context:
+        logger.info("Handled context command locally.")
+        return [local_context]
 
     active_provider = provider or get_provider()
     raw: dict | None = None

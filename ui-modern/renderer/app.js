@@ -166,19 +166,22 @@ function showActionResult(data) {
   const action = data.action || data.name || 'ACTION';
   const message = data.message || data.result || 'Action completed.';
   const success = data.success !== false;
+
+  // Action events belong to Recent Actions only.
+  // The normal AURA response arrives separately through onMessage().
   addRecentAction(action, message, success);
-  // Make the result visible in the conversation too, including conversions and system actions.
-  const looksLikeConversion = /convert|conversion|exchange|currency|equals|₹|\$|€|£/i.test(`${action} ${message}`);
-  addMessage('AURA', message, looksLikeConversion ? 'RESULT' : 'ACTION');
   addLog(`${action}: ${message}`, success ? 'INFO' : 'ERROR');
 }
 
 function sendText() {
   const text = messageInput?.value.trim(); if (!text) return;
-  addMessage('YOU', text, 'YOU');
   messageInput.value = '';
   state.commandStartedAt = Date.now();
   addLog(`Command sent: ${text}`, 'INFO');
+
+  // Python is the single source of truth for conversation messages.
+  // It emits the user message through onMessage(), so adding it here
+  // would display every typed command twice.
   window.aura?.sendMessage(text);
 }
 

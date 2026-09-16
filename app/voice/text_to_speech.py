@@ -164,6 +164,14 @@ class TextToSpeech:
         except Exception as e:
             logger.warning(f"TTS failed while speaking: {e}")
 
+    def stop(self) -> None:
+        """Immediately stop the current SAPI5 utterance if one is running."""
+        try:
+            if self._engine is not None:
+                self._engine.stop()
+        except Exception as e:
+            logger.debug("TTS stop failed: %s", e)
+
     def is_available(self) -> bool:
         return self._ensure_engine()
 

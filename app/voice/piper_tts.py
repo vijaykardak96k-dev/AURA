@@ -179,6 +179,14 @@ class PiperTextToSpeech:
         except Exception as e:
             logger.warning(f"Piper synthesis/playback failed: {e}")
 
+    def stop(self) -> None:
+        """Stop Piper sounddevice playback immediately."""
+        try:
+            import sounddevice as sd
+            sd.stop()
+        except Exception as e:
+            logger.debug("Piper stop failed: %s", e)
+
     def synthesize_to_array(self, text: str):
         """
         Returns (numpy_float32_array, sample_rate) without playing it —

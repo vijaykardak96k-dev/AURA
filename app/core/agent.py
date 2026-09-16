@@ -49,10 +49,13 @@ States:
 
 import threading
 import time
+import difflib
+import re
 from enum import Enum
 from typing import Callable, Optional
 
 from app.actions.executor import execute_action
+from app.brain.schemas import ActionItem
 from app.brain.intent_parser import parse_intent
 from app.brain.provider import get_provider
 from app.memory import memory_manager
@@ -82,7 +85,24 @@ DEFAULT_SESSION_TIMEOUT = 120.0
 
 # Small delay after speech so trailing audio doesn't get interpreted
 # as another command.
-POST_SPEECH_PAUSE = 0.4
+POST_SPEECH_PAUSE = 1.0
+
+# Extra microphone settling time after AURA finishes speaking.
+# This prevents the tail of AURA's own TTS audio from becoming a command.
+MICROPHONE_SETTLE_SECONDS = 1.0
+
+# Short window in which a transcript matching AURA's last spoken response
+# is treated as speaker echo rather than a new user command.
+TTS_ECHO_SUPPRESSION_SECONDS = 3.0
+
+# While AURA is speaking, this small listener watches only for explicit
+# interruption words. It lets the user say "stop" or "mute" without waiting
+# for the response to finish.
+SPEECH_INTERRUPT_POLL_SECONDS = 1.0
+SPEECH_INTERRUPT_WORDS = {
+    "stop", "mute", "quiet", "silence", "be quiet",
+    "stop talking", "stop speaking", "shut up",
+}
 
 # Prevent a race between the voice loop and a command thread.
 _INPUT_RACE_GRACE_SECONDS = 1.5
@@ -269,6 +289,12 @@ class AuraAgent:
         self._last_activity_time = (
             time.monotonic()
         )
+
+        # TTS echo protection.
+        self._last_tts_text = ""
+        self._tts_echo_block_until = 0.0
+        self._tts_interrupt_event = threading.Event()
+        self._tts_interrupt_thread = None
 
 
     # ============================================================
@@ -556,6 +582,94 @@ class AuraAgent:
 
 
     # ============================================================
+    # VOICE / LOCAL CONTROL
+    # ============================================================
+
+    @staticmethod
+    def _normalize_command(text: str) -> str:
+        return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]+", " ", text.lower())).strip()
+
+    def _run_local_action(self, action: str, parameters: dict) -> bool:
+        """Handle common desktop commands locally without waiting for AI."""
+        item = ActionItem(action=action, parameters=parameters)
+        try:
+            self._set_state(AuraState.EXECUTING)
+            success, message = execute_action(item)
+        except Exception as exc:
+            logger.exception("Local action failed: %s", action)
+            success, message = False, f"I couldn't complete that action: {exc}"
+
+        if self.on_action:
+            try:
+                self.on_action(action, message)
+            except Exception as exc:
+                logger.warning("Local action callback failed: %s", exc)
+
+        self.respond(message)
+        return True
+
+    def _handle_local_control(self, text: str) -> bool:
+        """Fast path for high-confidence controls that should never depend on Gemini/Groq."""
+        normalized = self._normalize_command(text)
+
+        # "sleep" means put AURA into its listening sleep mode. Explicit
+        # Windows/PC sleep requests continue through SLEEP_SYSTEM.
+        if normalized in {"sleep", "go to sleep", "aura sleep", "aura go to sleep", "sleep aura"}:
+            self._touch_activity()
+            self.respond("Okay. I'll go to sleep. Say AURA when you want me again.")
+            if self.state != AuraState.STOPPED:
+                self._set_state(AuraState.SLEEPING)
+            return True
+
+        if normalized in {"wake up", "wake aura", "aura wake up"}:
+            if self.state == AuraState.SLEEPING:
+                self.wake()
+                self.respond("I'm awake.")
+            else:
+                self.respond("I'm already awake.")
+            return True
+
+        app_match = re.fullmatch(r"(?:open|launch|start)\s+(brave|brave browser|whatsapp|telegram)", normalized)
+        if app_match:
+            app = app_match.group(1).replace(" browser", "").strip()
+            return self._run_local_action("OPEN_APP", {"app": app})
+
+        if normalized in {"open youtube", "launch youtube", "start youtube"}:
+            return self._run_local_action("OPEN_WEBSITE", {"site": "youtube"})
+
+        match = re.fullmatch(r"(?:play|watch)\s+(.+?)\s+(?:on\s+)?youtube", normalized)
+        if match:
+            return self._run_local_action("YOUTUBE_PLAY", {"query": match.group(1).strip()})
+
+        match = re.fullmatch(r"(?:search|find)\s+(.+?)\s+on\s+youtube", normalized)
+        if match:
+            return self._run_local_action("YOUTUBE_SEARCH", {"query": match.group(1).strip()})
+
+        return False
+
+    def _listen_for_speech_interrupt(self) -> None:
+        """Listen during TTS and stop it only for explicit interruption phrases."""
+        if self.stt is None:
+            return
+        while not self._tts_interrupt_event.is_set() and not self._stop_event.is_set():
+            try:
+                text = self.stt.listen_for_interrupt(max_record_seconds=SPEECH_INTERRUPT_POLL_SECONDS)
+            except Exception:
+                time.sleep(0.15)
+                continue
+            normalized = self._normalize_command(text)
+            if normalized in SPEECH_INTERRUPT_WORDS:
+                logger.info("Speech interruption detected: %r", text)
+                self._tts_interrupt_event.set()
+                try:
+                    stop = getattr(self.tts, "stop", None)
+                    if callable(stop):
+                        stop()
+                except Exception as exc:
+                    logger.warning("Could not stop TTS after interruption: %s", exc)
+                return
+
+    # ============================================================
     # RESPONSE
     # ============================================================
 
@@ -640,9 +754,35 @@ class AuraAgent:
 
             try:
 
-                self.tts.speak(
-                    text
+                # Remember exactly what AURA just said so an echoed Whisper
+                # transcript can be rejected before it reaches the command
+                # parser.
+                self._last_tts_text = text
+                self._tts_echo_block_until = (
+                    time.monotonic()
+                    + TTS_ECHO_SUPPRESSION_SECONDS
                 )
+
+                self._tts_interrupt_event.clear()
+                self._tts_interrupt_thread = None
+
+                # Keep a tiny interrupt listener alive while Piper is speaking.
+                # It listens only for explicit stop/mute phrases, so ordinary
+                # speech and AURA's own audio are ignored.
+                if self.stt is not None:
+                    self._tts_interrupt_thread = threading.Thread(
+                        target=self._listen_for_speech_interrupt,
+                        name="AURA-TTS-Interrupt",
+                        daemon=True,
+                    )
+                    self._tts_interrupt_thread.start()
+
+                self.tts.speak(text)
+
+                self._tts_interrupt_event.set()
+                if self._tts_interrupt_thread is not None:
+                    self._tts_interrupt_thread.join(timeout=0.4)
+                    self._tts_interrupt_thread = None
 
             except Exception as e:
 
@@ -848,6 +988,12 @@ class AuraAgent:
         text: str,
     ) -> None:
 
+        # High-confidence desktop controls bypass the network AI provider.
+        # This makes sleep/app/YouTube controls responsive even when Gemini
+        # quota or Groq connectivity is unavailable.
+        if self._handle_local_control(text):
+            return
+
         self._touch_activity()
 
 
@@ -893,6 +1039,14 @@ class AuraAgent:
                     f"User message callback failed: {e}"
                 )
 
+
+        # High-confidence desktop controls bypass the network AI provider.
+        # This makes sleep/app/YouTube controls responsive even when Gemini
+        # quota or Groq connectivity is unavailable. The user message has
+        # already been emitted above, so local commands still appear once in
+        # the conversation and memory.
+        if self._handle_local_control(text):
+            return
 
         # --------------------------------------------------------
         # Build context
@@ -1523,6 +1677,34 @@ class AuraAgent:
     # ACTIVE VOICE CYCLE
     # ============================================================
 
+    def _is_probable_tts_echo(self, text: str) -> bool:
+        """Return True when a fresh transcript looks like AURA's own TTS."""
+        if not text or not self._last_tts_text:
+            return False
+
+        if time.monotonic() > self._tts_echo_block_until:
+            return False
+
+        def normalize(value: str) -> str:
+            return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+
+        current = normalize(text)
+        spoken = normalize(self._last_tts_text)
+
+        if not current or not spoken:
+            return False
+
+        if current == spoken:
+            return True
+
+        similarity = difflib.SequenceMatcher(
+            None,
+            current,
+            spoken,
+        ).ratio()
+
+        return similarity >= 0.88
+
     def _active_cycle(
         self,
     ) -> None:
@@ -1540,8 +1722,12 @@ class AuraAgent:
 
         try:
 
+            # Do not immediately reopen the microphone after TTS.
+            # Discard the short audio tail already present in the mic path.
             text = (
-                self.stt.listen_until_silence()
+                self.stt.listen_until_silence(
+                    initial_discard_seconds=MICROPHONE_SETTLE_SECONDS,
+                )
             )
 
 
@@ -1615,6 +1801,16 @@ class AuraAgent:
 
             return
 
+
+        # --------------------------------------------------------
+        # Reject AURA's own TTS if Whisper captured speaker echo.
+        # --------------------------------------------------------
+
+        if self._is_probable_tts_echo(text):
+            logger.info(
+                f'Discarding probable TTS echo: "{text}"'
+            )
+            return
 
         # --------------------------------------------------------
         # Nothing was said.

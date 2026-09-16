@@ -399,6 +399,18 @@ class SpeechToText:
         """
         self._wake_tail = None
 
+
+    def listen_for_interrupt(self, max_record_seconds: float = 1.0) -> str:
+        """Capture a short audio window used only while AURA is speaking.
+
+        This deliberately does not use the normal VAD command path: the
+        interrupt listener must return quickly and should only be interpreted
+        by the agent for explicit words such as stop/mute.
+        """
+        seconds = max(0.6, min(1.5, float(max_record_seconds)))
+        audio = self.record_audio(seconds)
+        return self.transcribe(audio, wake_mode=False).strip()
+
     # ------------------------------------------------------------------
     # ACTIVE command listening
     # ------------------------------------------------------------------
@@ -410,6 +422,7 @@ class SpeechToText:
         max_record_seconds: float = COMMAND_MAX_RECORD_SECONDS,
         pre_roll_seconds: float = COMMAND_PRE_ROLL_SECONDS,
         energy_threshold: Optional[float] = None,
+        initial_discard_seconds: float = 0.0,
     ) -> str:
         """
         Wait for speech, record until silence, then transcribe.
@@ -456,6 +469,29 @@ class SpeechToText:
                 dtype="float32",
                 blocksize=block_size,
             ) as stream:
+
+                # Flush the microphone's existing audio before listening for
+                # the next command. This is especially important immediately
+                # after AURA's TTS, where the speaker tail can still be heard
+                # by the microphone.
+                discard_remaining = max(
+                    0.0,
+                    float(initial_discard_seconds),
+                )
+
+                while discard_remaining > 0.0:
+                    discard_blocks = max(
+                        1,
+                        int(
+                            discard_remaining
+                            / _VAD_BLOCK_SECONDS
+                        ),
+                    )
+
+                    for _ in range(discard_blocks):
+                        stream.read(block_size)
+
+                    discard_remaining = 0.0
 
                 while True:
                     block, _overflowed = stream.read(block_size)

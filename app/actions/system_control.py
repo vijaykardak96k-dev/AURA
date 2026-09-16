@@ -1,114 +1,135 @@
 """
-app/actions/system_control.py
-
-System information (CPU/RAM/battery) via psutil, and Windows power actions
-(lock/restart/shutdown/scheduled shutdown/cancel) via the native `shutdown.exe`
-and `ctypes` — never via a generic shell command built from AI output.
-Every DANGEROUS action here assumes the caller (executor.py) has already
-obtained explicit user confirmation.
+Windows system controls and system information.
 """
 
 import ctypes
+import platform
 import subprocess
 import sys
-
 import psutil
-
 from app.utils.logger import get_logger
 
 logger = get_logger()
 
 
-def get_cpu_usage() -> tuple[bool, str]:
+def get_cpu_usage():
     try:
         percent = psutil.cpu_percent(interval=0.5)
         return True, f"You're using about {percent:.0f}% of your CPU."
-    except Exception as e:  # psutil is generally safe, but never crash the app
-        logger.error(f"get_cpu_usage failed: {e}")
-        return False, "I couldn't check CPU usage right now."
+    except Exception as exc:
+        logger.error("CPU info failed: %s", exc)
+        return False, "I couldn't check CPU usage."
 
 
-def get_ram_usage() -> tuple[bool, str]:
+def get_ram_usage():
     try:
         mem = psutil.virtual_memory()
-        used_gb = mem.used / (1024 ** 3)
-        total_gb = mem.total / (1024 ** 3)
-        return True, f"You're using about {mem.percent:.0f}% of your RAM ({used_gb:.1f} GB of {total_gb:.1f} GB)."
-    except Exception as e:
-        logger.error(f"get_ram_usage failed: {e}")
-        return False, "I couldn't check RAM usage right now."
+        return True, f"You're using about {mem.percent:.0f}% of your RAM ({mem.used/(1024**3):.1f} GB of {mem.total/(1024**3):.1f} GB)."
+    except Exception as exc:
+        logger.error("RAM info failed: %s", exc)
+        return False, "I couldn't check RAM usage."
 
 
-def get_battery_status() -> tuple[bool, str]:
+def get_disk_usage(drive=None):
+    try:
+        if not drive:
+            drive = (psutil.disk_partitions()[0].mountpoint if psutil.disk_partitions() else "C:\\")
+        usage = psutil.disk_usage(drive)
+        return True, f"Drive {drive} is {usage.percent:.0f}% full ({usage.free/(1024**3):.1f} GB free of {usage.total/(1024**3):.1f} GB)."
+    except Exception as exc:
+        logger.error("Disk info failed: %s", exc)
+        return False, "I couldn't check disk usage."
+
+
+def get_battery_status():
     try:
         battery = psutil.sensors_battery()
         if battery is None:
-            return True, "This machine doesn't report a battery — you're probably on a desktop."
+            return True, "This computer doesn't report a battery."
         state = "charging" if battery.power_plugged else "on battery"
         return True, f"Battery is at {battery.percent:.0f}%, currently {state}."
-    except Exception as e:
-        logger.error(f"get_battery_status failed: {e}")
-        return False, "I couldn't check the battery status right now."
+    except Exception as exc:
+        logger.error("Battery info failed: %s", exc)
+        return False, "I couldn't check the battery."
 
 
-def lock_pc() -> tuple[bool, str]:
+def get_system_info():
+    try:
+        mem = psutil.virtual_memory()
+        return True, (
+            f"You're running {platform.system()} {platform.release()} on "
+            f"{platform.machine()}. The computer has {psutil.cpu_count(logical=True)} "
+            f"logical CPU cores and {mem.total/(1024**3):.1f} GB of RAM."
+        )
+    except Exception as exc:
+        logger.error("System info failed: %s", exc)
+        return False, "I couldn't collect system information."
+
+
+def lock_pc():
     if not sys.platform.startswith("win"):
-        return False, "Locking the PC is only supported on Windows."
+        return False, "Locking is only supported on Windows."
     try:
         ctypes.windll.user32.LockWorkStation()
         return True, "Locking your computer now."
-    except Exception as e:
-        logger.error(f"lock_pc failed: {e}")
+    except Exception as exc:
+        logger.error("lock_pc failed: %s", exc)
         return False, "I couldn't lock the computer."
 
 
-def restart_pc() -> tuple[bool, str]:
-    """Caller must have already confirmed with the user."""
+def sleep_pc():
+    if not sys.platform.startswith("win"):
+        return False, "Sleep is only supported on Windows."
+    try:
+        subprocess.run(["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"], check=True)
+        return True, "Putting your computer to sleep."
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.error("sleep_pc failed: %s", exc)
+        return False, "I couldn't put the computer to sleep."
+
+
+def restart_pc():
     if not sys.platform.startswith("win"):
         return False, "Restarting is only supported on Windows."
     try:
         subprocess.run(["shutdown", "/r", "/t", "0"], check=True)
         return True, "Restarting your computer now."
-    except (OSError, subprocess.CalledProcessError) as e:
-        logger.error(f"restart_pc failed: {e}")
+    except (OSError, subprocess.CalledProcessError) as exc:
+        logger.error("restart_pc failed: %s", exc)
         return False, "I couldn't restart the computer."
 
 
-def shutdown_pc() -> tuple[bool, str]:
-    """Caller must have already confirmed with the user."""
+def shutdown_pc():
     if not sys.platform.startswith("win"):
         return False, "Shutting down is only supported on Windows."
     try:
         subprocess.run(["shutdown", "/s", "/t", "0"], check=True)
         return True, "Shutting down your computer now."
-    except (OSError, subprocess.CalledProcessError) as e:
-        logger.error(f"shutdown_pc failed: {e}")
+    except (OSError, subprocess.CalledProcessError) as exc:
+        logger.error("shutdown_pc failed: %s", exc)
         return False, "I couldn't shut down the computer."
 
 
-def schedule_shutdown(minutes: int) -> tuple[bool, str]:
-    """Caller must have already confirmed with the user."""
+def schedule_shutdown(minutes):
     if not sys.platform.startswith("win"):
-        return False, "Scheduling a shutdown is only supported on Windows."
+        return False, "Scheduling shutdown is only supported on Windows."
     try:
         minutes = max(0, int(minutes))
-        seconds = minutes * 60
-        subprocess.run(["shutdown", "/s", "/t", str(seconds)], check=True)
-        return True, f"Shutdown scheduled in {minutes} minute(s). Say 'cancel shutdown' to stop it."
-    except (OSError, subprocess.CalledProcessError, ValueError) as e:
-        logger.error(f"schedule_shutdown failed: {e}")
+        subprocess.run(["shutdown", "/s", "/t", str(minutes * 60)], check=True)
+        return True, f"Shutdown scheduled in {minutes} minute(s). Say cancel shutdown to stop it."
+    except (OSError, subprocess.CalledProcessError, ValueError) as exc:
+        logger.error("schedule_shutdown failed: %s", exc)
         return False, "I couldn't schedule the shutdown."
 
 
-def cancel_shutdown() -> tuple[bool, str]:
+def cancel_shutdown():
     if not sys.platform.startswith("win"):
         return False, "This is only supported on Windows."
     try:
         subprocess.run(["shutdown", "/a"], check=True)
         return True, "Scheduled shutdown cancelled."
     except subprocess.CalledProcessError:
-        # shutdown /a returns nonzero if there was nothing scheduled — not a crash-worthy error.
         return False, "There wasn't a shutdown scheduled."
-    except OSError as e:
-        logger.error(f"cancel_shutdown failed: {e}")
+    except OSError as exc:
+        logger.error("cancel_shutdown failed: %s", exc)
         return False, "I couldn't cancel the shutdown."
