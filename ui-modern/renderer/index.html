@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    />
+
+    <title>AURA — Personal AI Assistant</title>
+
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+    <div class="app-shell">
+
+        <!-- =====================================================
+             TOP BAR
+        ====================================================== -->
+
+        <header class="topbar">
+
+            <div class="brand">
+                <div class="brand-mark">
+                    <span></span>
+                </div>
+
+                <div>
+                    <div class="brand-name">AURA</div>
+                    <div class="brand-subtitle">
+                        PERSONAL AI ASSISTANT
+                    </div>
+                </div>
+            </div>
+
+            <div class="topbar-right">
+
+                <div class="engine-status">
+                    <span class="status-dot"></span>
+
+                    <div>
+                        <span class="engine-label">
+                            AI ENGINE
+                        </span>
+
+                        <strong id="aiEngine">
+                            GROQ
+                        </strong>
+                    </div>
+                </div>
+
+                <div class="system-time" id="systemTime">
+                    00:00
+                </div>
+
+            </div>
+
+        </header>
+
+
+        <!-- =====================================================
+             MAIN CONTENT
+        ====================================================== -->
+
+        <main class="main-layout">
+
+            <!-- =================================================
+                 LEFT PANEL
+            ================================================== -->
+
+            <aside class="left-panel">
+
+                <div class="panel-heading">
+                    <span>SESSION</span>
+                    <span class="live-indicator">LIVE</span>
+                </div>
+
+
+                <!-- AURA CORE -->
+
+                <section class="aura-core-section">
+
+                    <div class="core-container">
+
+                        <div class="core-orbit orbit-one"></div>
+                        <div class="core-orbit orbit-two"></div>
+                        <div class="core-orbit orbit-three"></div>
+
+                        <div class="core-ring outer-ring"></div>
+                        <div class="core-ring middle-ring"></div>
+
+                        <div class="core">
+                            <div class="core-inner"></div>
+                            <div class="core-glow"></div>
+                        </div>
+
+                    </div>
+
+
+                    <div class="core-status">
+
+                        <div
+                            class="state-label"
+                            id="stateLabel"
+                        >
+                            ACTIVE
+                        </div>
+
+                        <div
+                            class="state-description"
+                            id="stateDescription"
+                        >
+                            Listening for your command
+                        </div>
+
+                    </div>
+
+                </section>
+
+
+                <!-- SESSION TIMER -->
+
+                <section class="session-card">
+
+                    <div class="session-card-top">
+
+                        <span>
+                            SESSION
+                        </span>
+
+                        <span
+                            id="sessionStatus"
+                            class="session-active"
+                        >
+                            ACTIVE
+                        </span>
+
+                    </div>
+
+                    <div class="session-progress">
+
+                        <div
+                            id="sessionProgress"
+                            class="session-progress-fill"
+                        ></div>
+
+                    </div>
+
+                    <div class="session-footer">
+
+                        <span>
+                            Inactivity timeout
+                        </span>
+
+                        <strong id="sessionTimer">
+                            02:00
+                        </strong>
+
+                    </div>
+
+                </section>
+
+
+                <!-- LISTENING CONTROL -->
+
+                <button
+                    id="listenToggle"
+                    class="listen-button"
+                >
+
+                    <span class="listen-icon">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </span>
+
+                    <span id="listenButtonText">
+                        STOP LISTENING
+                    </span>
+
+                </button>
+
+
+                <!-- SYSTEM STATUS -->
+
+                <section class="system-panel">
+
+                    <div class="panel-heading">
+                        <span>SYSTEM</span>
+                    </div>
+
+                    <div class="system-grid">
+
+                        <div class="system-item">
+
+                            <span class="system-name">
+                                CPU
+                            </span>
+
+                            <strong id="cpuValue">
+                                --%
+                            </strong>
+
+                            <div class="mini-bar">
+                                <span
+                                    id="cpuBar"
+                                    style="width: 0%"
+                                ></span>
+                            </div>
+
+                        </div>
+
+
+                        <div class="system-item">
+
+                            <span class="system-name">
+                                MEMORY
+                            </span>
+
+                            <strong id="ramValue">
+                                --%
+                            </strong>
+
+                            <div class="mini-bar">
+                                <span
+                                    id="ramBar"
+                                    style="width: 0%"
+                                ></span>
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="connection-row">
+
+                        <div class="connection">
+                            <span class="connection-dot online"></span>
+                            MICROPHONE
+                        </div>
+
+                        <div class="connection">
+                            <span class="connection-dot online"></span>
+                            AI
+                        </div>
+
+                        <div class="connection">
+                            <span class="connection-dot online"></span>
+                            TTS
+                        </div>
+
+                    </div>
+
+                </section>
+
+            </aside>
+
+
+            <!-- =================================================
+                 CENTER / CONVERSATION
+            ================================================== -->
+
+            <section class="conversation-panel">
+
+                <div class="conversation-header">
+
+                    <div>
+
+                        <div class="section-title">
+                            CONVERSATION
+                        </div>
+
+                        <div class="section-subtitle">
+                            Your interaction with AURA
+                        </div>
+
+                    </div>
+
+                    <div class="conversation-status">
+                        <span class="status-dot"></span>
+                        CONNECTED
+                    </div>
+
+                </div>
+
+
+                <div
+                    id="conversation"
+                    class="conversation"
+                >
+
+                                    </div>
+
+
+                <!-- INPUT AREA -->
+
+                <div class="input-area">
+
+                    <div class="input-wrapper">
+
+                        <div class="input-prefix">
+                            >
+                        </div>
+
+                        <input
+                            id="messageInput"
+                            type="text"
+                            autocomplete="off"
+                            placeholder="Type a command or ask AURA anything..."
+                        />
+
+                        <button
+                            id="sendButton"
+                            class="send-button"
+                        >
+                            <span>SEND</span>
+
+                            <svg
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                            >
+                                <path d="M5 12h14"></path>
+                                <path d="m13 6 6 6-6 6"></path>
+                            </svg>
+
+                        </button>
+
+                    </div>
+
+                    <div class="input-hint">
+                        Press Enter to send
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- =================================================
+                 RIGHT PANEL
+            ================================================== -->
+
+            <aside class="right-panel">
+
+                <div class="panel-heading">
+                    <span>RECENT ACTIONS</span>
+
+                    <span
+                        id="actionCount"
+                        class="action-count"
+                    >
+                        0
+                    </span>
+                </div>
+
+
+                <div
+                    id="recentActions"
+                    class="recent-actions"
+                >
+
+                    <div class="empty-actions">
+                        <div class="empty-icon">
+                            —
+                        </div>
+
+                        <span>
+                            No recent actions
+                        </span>
+                    </div>
+
+                </div>
+
+
+                <!-- CAPABILITIES -->
+
+                <section class="capabilities">
+
+                    <div class="panel-heading">
+                        <span>CAPABILITIES</span>
+                    </div>
+
+                    <div class="capability-list">
+
+                        <div class="capability">
+                            <span class="capability-line"></span>
+                            <span>Application Control</span>
+                        </div>
+
+                        <div class="capability">
+                            <span class="capability-line"></span>
+                            <span>File Management</span>
+                        </div>
+
+                        <div class="capability">
+                            <span class="capability-line"></span>
+                            <span>Web Search</span>
+                        </div>
+
+                        <div class="capability">
+                            <span class="capability-line"></span>
+                            <span>System Control</span>
+                        </div>
+
+                        <div class="capability">
+                            <span class="capability-line"></span>
+                            <span>AI Conversation</span>
+                        </div>
+
+                    </div>
+
+                </section>
+
+
+                <!-- FOOTER -->
+
+                <div class="right-footer">
+
+                    <span>AURA CORE</span>
+
+                    <span class="version">
+                        v2.0
+                    </span>
+
+                </div>
+
+            </aside>
+
+        </main>
+
+
+        <!-- =====================================================
+             BOTTOM STATUS BAR
+        ====================================================== -->
+
+        <footer class="bottom-bar">
+
+            <div class="bottom-left">
+
+                <span class="bottom-status">
+                    <span class="tiny-dot"></span>
+                    SYSTEM ONLINE
+                </span>
+
+                <span class="separator"></span>
+
+                <span>
+                    WHISPER STT
+                </span>
+
+                <span class="separator"></span>
+
+                <span>
+                    PIPER TTS
+                </span>
+
+            </div>
+
+
+            <div class="bottom-right">
+
+                <span>
+                    SECURE SESSION
+                </span>
+
+                <span class="separator"></span>
+
+                <span id="currentTime">
+                    --
+                </span>
+
+            </div>
+
+        </footer>
+
+    </div>
+
+
+    <script src="app.js"></script>
+
+</body>
+</html>

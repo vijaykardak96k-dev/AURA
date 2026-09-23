@@ -1,0 +1,27 @@
+# AURA — config.example.yaml
+#
+# Optional overrides for application executable paths. Copy to
+# config/config.yaml if you need to point AURA at a non-default install
+# location. Leave a value as "auto" (or omit it) to let AURA auto-detect
+# via common install paths and the system PATH — see
+# app/actions/app_control.py.
+#
+# This file is not required for Stage 1 — the fallback parser and intent
+# schema work without it. It becomes relevant once you actually run
+# OPEN_APP/CLOSE_APP on a real Windows machine.
+
+applications:
+  chrome:
+    executable: auto
+  edge:
+    executable: auto
+  vscode:
+    executable: auto
+  notepad:
+    executable: auto
+  calculator:
+    executable: auto
+  explorer:
+    executable: auto
+  terminal:
+    executable: auto
